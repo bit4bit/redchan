@@ -3,7 +3,6 @@
 package redchan
 
 import (
-	//	"container/list"
 	"fmt"
 	"github.com/garyburd/redigo/redis"
 	"time"
@@ -11,8 +10,9 @@ import (
 
 const (
 	//Where client send and recv data
-	FORMAT_CHANNEL_KEY      = "redchan:channel:%s"
-	FORMAT_CHANNEL_RECV_KEY = "redchan:channel:recv:%s"
+	FORMAT_CHANNEL_KEY       = "redchan:channel:%s"
+	FORMAT_CHANNEL_KEY_CLOSE = "redchan:channel:close:%s"
+	FORMAT_CHANNEL_RECV_KEY  = "redchan:channel:recv:%s"
 )
 
 var (
@@ -62,14 +62,21 @@ func Send(channel RedChan, params ...string) (SendFunc, error) {
 	conn := pool.Get()
 
 	sendKey := fmt.Sprintf(FORMAT_CHANNEL_KEY, channel.ChannelID())
+	sendCloseKey := fmt.Sprintf(FORMAT_CHANNEL_KEY_CLOSE, channel.ChannelID())
 	recvKey := fmt.Sprintf(FORMAT_CHANNEL_RECV_KEY, channel.ChannelID())
 
 	queue := make(chan chan []byte, channel.ChannelSize()+1)
+	conn.Do("DEL", recvKey)
+	conn.Do("DEL", sendKey)
+	conn.Do("DEL", sendCloseKey)
 
 	go func() {
 		defer conn.Close()
 		for redchan := range queue {
-			data := <-redchan
+			data, closed := <-redchan
+			if !closed {
+				break
+			}
 
 			_, replyErr := conn.Do("LPUSH", sendKey, data)
 			if replyErr != nil {
@@ -82,10 +89,16 @@ func Send(channel RedChan, params ...string) (SendFunc, error) {
 			}
 
 		}
+
+		_, replyErr := conn.Do("LPUSH", sendCloseKey, true)
+		if replyErr != nil {
+			panic(replyErr)
+		}
 	}()
+
 	send := func() chan<- []byte {
 		redchan := make(chan []byte)
-		queue <- (redchan)
+		queue <- redchan
 
 		return redchan
 	}
@@ -110,42 +123,64 @@ func Recv(channel RedChan, params ...string) (<-chan []byte, error) {
 func Close(channel RedChan, params ...string) {
 	pool := newPool(getRedisParams(params...))
 	conn := pool.Get()
-	conn.Do("DEL", channel.ChannelID())
-	conn.Close()
+	defer conn.Close()
+	sendKey := fmt.Sprintf(FORMAT_CHANNEL_KEY, channel.ChannelID())
+	sendCloseKey := fmt.Sprintf(FORMAT_CHANNEL_KEY_CLOSE, channel.ChannelID())
+	recvKey := fmt.Sprintf(FORMAT_CHANNEL_RECV_KEY, channel.ChannelID())
+
+	_, replyErr := conn.Do("LPUSH", sendCloseKey, true)
+	if replyErr != nil {
+		panic(replyErr)
+	}
+	<-time.After(time.Millisecond * 500)
+	conn.Do("DEL", sendKey)
+	conn.Do("DEL", sendCloseKey)
+	conn.Do("DEL", recvKey)
 }
 
 func doRecvRedChan(pool *redis.Pool, redchan chan<- []byte, size int, channelID string) {
-	var keyID string
 
 	defer pool.Close()
 
 	recvKey := fmt.Sprintf(FORMAT_CHANNEL_KEY, channelID)
 	sendKey := fmt.Sprintf(FORMAT_CHANNEL_RECV_KEY, channelID)
+	sendCloseKey := fmt.Sprintf(FORMAT_CHANNEL_KEY_CLOSE, channelID)
+
 	recvData := make(chan []byte, size+1)
-	stop := make(chan struct{})
+	stopPoll := make(chan struct{})
+	stopChan := make(chan struct{})
 
 	go func() {
 		conn := pool.Get()
 		defer conn.Close()
-
 		for {
 			select {
-			case <-stop:
-				break
+			case <-stopPoll:
+				close(redchan)
+				return
 			default:
-				var data []byte
-
-				reply, replyErr := redis.Values(conn.Do("BRPOP", recvKey, 0))
-				if replyErr != nil {
-					panic(replyErr)
+				closedKey, replyCloseErr := redis.Bool(conn.Do("RPOP", sendCloseKey))
+				if replyCloseErr != nil && replyCloseErr != redis.ErrNil {
+					panic(replyCloseErr)
 				}
 
-				if _, err := redis.Scan(reply, &keyID, &data); err != nil {
-					panic(err)
+				if closedKey {
+					close(stopChan)
+				}
+
+				var data []byte
+				<-time.After(time.Millisecond * 100)
+				data, replyErr := redis.Bytes(conn.Do("RPOP", recvKey))
+				if replyErr != nil {
+					switch replyErr {
+					case redis.ErrNil:
+						continue
+					default:
+						panic(replyErr)
+					}
 				}
 
 				recvData <- data
-
 			}
 		}
 	}()
@@ -156,20 +191,17 @@ loop:
 	for {
 		select {
 		//auto close when no more data
-		case <-time.After(time.Second * 30):
+		case <-stopChan:
 			//notify we close it
-			close(stop)
-			close(redchan)
+			close(stopPoll)
 			break loop
 		case data := <-recvData:
 			redchan <- data
-
 			_, replyErr := conn.Do("LPUSH", sendKey, "ok")
 
 			if replyErr != nil {
 				panic(replyErr)
 			}
-
 		}
 
 	}

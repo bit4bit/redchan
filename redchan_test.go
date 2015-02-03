@@ -244,6 +244,47 @@ loop:
 
 }
 
+func TestCloseSend(t *testing.T) {
+	redisAddress := fmt.Sprintf(":%d", TEST_PORT_REDIS)
+	SetRedis(redisAddress)
+
+	redis, redisErr := runRedisServer(TEST_PORT_REDIS)
+	if redisErr != nil {
+		t.Fatal(redisErr)
+	}
+	defer redis.Kill()
+	time.Sleep(time.Second * 2)
+
+	redisChannel := RedisChannel{"tescloset", 0}
+	sendCh, sendErr := Send(redisChannel)
+	if sendErr != nil {
+		t.Fatal(sendErr)
+	}
+	recvCh, recvErr := Recv(redisChannel)
+	if recvErr != nil {
+		t.Fatal(recvErr)
+	}
+	defer Close(redisChannel)
+
+	go func() {
+		sendCh() <- []byte("a")
+		sendCh() <- []byte("b")
+		close(sendCh())
+	}()
+
+	if string(<-recvCh) != "a" {
+		t.Fatal("invalid data")
+	}
+
+	if string(<-recvCh) != "b" {
+		t.Fatal("invalid data")
+	}
+	_, closed := <-recvCh
+	if closed != false {
+		t.Fatal("closing")
+	}
+}
+
 func runRedisServer(port int) (*os.Process, error) {
 	cmd := exec.Command("redis-server", "--port", fmt.Sprintf("%d", port))
 	if err := cmd.Start(); err != nil {

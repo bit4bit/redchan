@@ -3,7 +3,7 @@ redchan
 
 GO Chan over Redis.
 
-We use like go chan.
+We use like Go chan.
 
 **install:**
 
@@ -33,10 +33,13 @@ if recvErr != nil {
 go func(){
 	sendCh() <- []byte("mydata")
 	sendCh() <- []byte("mydata..")
+	close(sendCh())
 }()
 
-<-recvCh
-<-recvCh
+for recv := <-recvCh {
+	...
+}
+
 
 ....
 ~~~
@@ -60,7 +63,7 @@ if recvErr != nil {
 
 sendCh() <- []byte("mydata")
 sendCh() <- []byte("mydata..")
-
+close(sendCh())
 
 <-recvCh
 <-recvCh
