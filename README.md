@@ -11,7 +11,7 @@ We use like Go chan.
 go get github.com/bit4bit/redchan
 ~~~
 
-```example unbuffered:``
+```example unbuffered:```
 
 
 
@@ -74,7 +74,7 @@ close(sendCh())
 ~~~
 
 
-```example encoding decoding:``
+```example encoding decoding:```
 
 
 
