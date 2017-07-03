@@ -1,6 +1,8 @@
 package redchan
 
 import (
+	"bytes"
+	"encoding/gob"
 	"github.com/garyburd/redigo/redis"
 	"strconv"
 	"time"
@@ -57,4 +59,20 @@ func getRedisParams(params ...string) (string, string) {
 		redisAuth = DEFAULT_REDIS_AUTH
 	}
 	return redisAddress, redisAuth
+}
+
+func encode(data interface{}) ([]byte, error) {
+	var buf bytes.Buffer
+	if err := gob.NewEncoder(&buf).Encode(data); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
+}
+
+func decode(raw []byte, val interface{}) error {
+	buf := bytes.NewBuffer(raw)
+	if err := gob.NewDecoder(buf).Decode(val); err != nil {
+		return err
+	}
+	return nil
 }

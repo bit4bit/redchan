@@ -6,9 +6,15 @@ import (
 	"os/exec"
 	"testing"
 	"time"
+	"sync"
+	"bytes"
 )
 
 const TEST_PORT_REDIS = 5445
+
+type msg struct {
+	Data []byte
+}
 
 func TestBuffered(t *testing.T) {
 	redisAddress := fmt.Sprintf(":%d", TEST_PORT_REDIS)
@@ -21,37 +27,39 @@ func TestBuffered(t *testing.T) {
 	defer redis.Kill()
 	time.Sleep(time.Second * 2)
 
-	redisChannel := RedisChannel{"testbuf", 2}
-	sendCh, sendErr := Send(redisChannel)
+	redisChannel := RedisChannel{msg{}, "testbuf", 2}
+	errch := make(chan error, 2)
+	sendCh, sendErr := Send(redisChannel, errch)
 	if sendErr != nil {
 		t.Fatal(sendErr)
 	}
 
-	recvCh, recvErr := Recv(redisChannel)
+	recvCh, recvErr := Recv(redisChannel, errch)
 	if recvErr != nil {
 		t.Fatal(recvErr)
 	}
 	defer Close(redisChannel)
 
 	done := make(chan bool)
+	testn := 1000
+	wg := sync.WaitGroup{}
 	go func() {
-		sendCh() <- []byte("test1")
-		sendCh() <- []byte("test2")
+		for i := 0; i < testn; i++ {
+			wg.Add(1)
+			sendCh() <- msg{[]byte(fmt.Sprintf("test%d",i))}
+			wg.Done()
+		}
 		close(done)
 	}()
+	wg.Wait()
 
-	select {
-	case <-time.After(time.Second * 3):
-		t.Fatal("timeout")
-	case <-done:
-	}
-
-	if string(<-recvCh) != "test1" {
-		t.Fatal("invalid order")
-	}
-
-	if string(<-recvCh) != "test2" {
-		t.Fatal("invalid order")
+	for i := 0 ; i < testn; i++ {
+		msg := (<-recvCh).(msg)
+		expected :=  fmt.Sprintf("test%d",i)
+		was := string(msg.Data)
+		if  was != expected {
+			t.Fatalf("was %s expected %s", was, expected)
+		}
 	}
 }
 
@@ -66,12 +74,13 @@ func TestSingleSend(t *testing.T) {
 	defer redis.Kill()
 	time.Sleep(time.Second * 2)
 
-	redisChannel := RedisChannel{"test", 0}
-	sendCh, sendErr := Send(redisChannel)
+	redisChannel := RedisChannel{[]byte{}, "test", 0}
+	errch := make(chan error, 2)
+	sendCh, sendErr := Send(redisChannel, errch)
 	if sendErr != nil {
 		t.Fatal(sendErr)
 	}
-	recvCh, recvErr := Recv(redisChannel)
+	recvCh, recvErr := Recv(redisChannel, errch)
 	if recvErr != nil {
 		t.Fatal(recvErr)
 	}
@@ -82,10 +91,11 @@ func TestSingleSend(t *testing.T) {
 	}()
 
 	select {
-	case <-time.After(time.Second * 3):
+	case <-time.After(time.Second):
 		t.Fatal("timeout")
 	case data := <-recvCh:
-		if string(data) != "end" {
+		buf := bytes.NewBuffer(data.([]byte))
+		if buf.String() != "end" {
 			t.Fatal("invalid data")
 		}
 	}
@@ -103,12 +113,13 @@ func TestBlockingSendChan(t *testing.T) {
 	defer redis.Kill()
 	time.Sleep(time.Second * 2)
 
-	redisChannel := RedisChannel{"testb", 0}
-	sendCh, sendErr := Send(redisChannel)
+	redisChannel := RedisChannel{[]byte{},"testb", 0}
+	errch := make(chan error, 2)
+	sendCh, sendErr := Send(redisChannel, errch)
 	if sendErr != nil {
 		t.Fatal(sendErr)
 	}
-	recvCh, recvErr := Recv(redisChannel)
+	recvCh, recvErr := Recv(redisChannel, errch)
 	if recvErr != nil {
 		t.Fatal(recvErr)
 	}
@@ -120,7 +131,7 @@ func TestBlockingSendChan(t *testing.T) {
 		close(done)
 	}()
 	select {
-	case <-time.After(time.Second * 2):
+	case <-time.After(time.Second):
 	case <-done:
 		t.Fatal("block send channel")
 	}
@@ -129,14 +140,14 @@ func TestBlockingSendChan(t *testing.T) {
 
 	go func() {
 
-		data := string(<-recvCh)
+		data := string((<-recvCh).([]byte))
 		if "test1" != data {
 			t.Fatalf("invalid data was %s", data)
 		}
 
-		data = string(<-recvCh)
+		data = string((<-recvCh).([]byte))
 		if "test2" != data {
-			t.Fatal("invalid data was %s", data)
+			t.Fatalf("invalid data was %s", data)
 		}
 		sendCh() <- []byte("test3")
 
@@ -161,12 +172,13 @@ func TestBlockingRecvChan(t *testing.T) {
 	defer redis.Kill()
 	time.Sleep(time.Second * 2)
 
-	redisChannel := RedisChannel{"testc", 0}
-	sendCh, sendErr := Send(redisChannel)
+	redisChannel := RedisChannel{[]byte{}, "testc", 0}
+	errch := make(chan error, 2)
+	sendCh, sendErr := Send(redisChannel, errch)
 	if sendErr != nil {
 		t.Fatal(sendErr)
 	}
-	recvCh, recvErr := Recv(redisChannel)
+	recvCh, recvErr := Recv(redisChannel, errch)
 	if recvErr != nil {
 		t.Fatal(recvErr)
 	}
@@ -202,12 +214,13 @@ func TestSequenceSend(t *testing.T) {
 	defer redis.Kill()
 	time.Sleep(time.Second * 2)
 
-	redisChannel := RedisChannel{"testa", 0}
-	sendCh, sendErr := Send(redisChannel)
+	redisChannel := RedisChannel{[]byte{}, "testa", 0}
+	errch := make(chan error, 2)
+	sendCh, sendErr := Send(redisChannel, errch)
 	if sendErr != nil {
 		t.Fatal(sendErr)
 	}
-	recvCh, recvErr := Recv(redisChannel)
+	recvCh, recvErr := Recv(redisChannel, errch)
 	if recvErr != nil {
 		t.Fatal(recvErr)
 	}
@@ -232,10 +245,10 @@ loop:
 			t.Fatal("timeout")
 		case data := <-recvCh:
 			expect := <-expectCh
-			if string(data) != expect {
+			if string(data.([]byte)) != expect {
 				t.Fatal("invalid order")
 			}
-			if string(data) == "end" {
+			if string(data.([]byte)) == "end" {
 				break loop
 			}
 
@@ -255,12 +268,13 @@ func TestCloseSend(t *testing.T) {
 	defer redis.Kill()
 	time.Sleep(time.Second * 2)
 
-	redisChannel := RedisChannel{"tescloset", 0}
-	sendCh, sendErr := Send(redisChannel)
+	redisChannel := RedisChannel{[]byte{}, "tescloset", 0}
+	errch := make(chan error, 2)
+	sendCh, sendErr := Send(redisChannel, errch)
 	if sendErr != nil {
 		t.Fatal(sendErr)
 	}
-	recvCh, recvErr := Recv(redisChannel)
+	recvCh, recvErr := Recv(redisChannel, errch)
 	if recvErr != nil {
 		t.Fatal(recvErr)
 	}
@@ -272,11 +286,11 @@ func TestCloseSend(t *testing.T) {
 		close(sendCh())
 	}()
 
-	if string(<-recvCh) != "a" {
+	if string((<-recvCh).([]byte)) != "a" {
 		t.Fatal("invalid data")
 	}
 
-	if string(<-recvCh) != "b" {
+	if string((<-recvCh).([]byte)) != "b" {
 		t.Fatal("invalid data")
 	}
 	_, closed := <-recvCh

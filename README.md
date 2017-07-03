@@ -11,14 +11,14 @@ We use like Go chan.
 go get github.com/bit4bit/redchan
 ~~~
 
-example unbuffered:
+```example unbuffered:``
 
 
 
 ~~~go
 ...
 
-redisChannel := RedisChannel{"channeluuid", 0}
+redisChannel := RedisChannel{[]byte{}, "channeluuid", 0}
 defer redchan.Close(redisChannel)
 sendCh, sendErr := redchan.Send(redisChannel)
 if sendErr != nil {
@@ -37,6 +37,7 @@ go func(){
 }()
 
 for recv := <-recvCh {
+	data := recv.([]byte)
 	...
 }
 
@@ -44,12 +45,13 @@ for recv := <-recvCh {
 ....
 ~~~
 
-example buffered:
+
+```example buffered:```
 
 ~~~go
 ...
 
-redisChannel := RedisChannel{"channeluuid", 2}
+redisChannel := RedisChannel{[]byte{}, "channeluuid", 2}
 defer redchan.Close(redisChannel)
 sendCh, sendErr := redchan.Send(redisChannel)
 if sendErr != nil {
@@ -67,6 +69,46 @@ close(sendCh())
 
 <-recvCh
 <-recvCh
+
+....
+~~~
+
+
+```example encoding decoding:``
+
+
+
+~~~go
+...
+
+type msg struct {
+	Message []byte
+	Kind int
+}
+
+redisChannel := RedisChannel{msg{}, "channeluuid", 0}
+defer redchan.Close(redisChannel)
+sendCh, sendErr := redchan.Send(redisChannel)
+if sendErr != nil {
+	t.Fatal(sendErr)
+}
+
+recvCh, recvErr := redchan.Recv(redisChannel)
+if recvErr != nil {
+		t.Fatal(recvErr)
+}
+
+go func(){
+	sendCh() <- msg{"hola", 1}
+	sendCh() <- msg{"hello", 2}
+	close(sendCh())
+}()
+
+for recv := <-recvCh {
+	mymsg := recv.(msg{})
+	...
+}
+
 
 ....
 ~~~
