@@ -10,7 +10,7 @@ import (
 )
 
 const (
-	formatChannelRedisKey       = "redchan:channel:%s"
+	formatChannelRedisKey      = "redchan:channel:%s"
 	formatChannelRedisKeyClose = "redchan:channel:close:%s"
 	formatChannelRedisRecvKey  = "redchan:channel:recv:%s"
 )
@@ -33,6 +33,10 @@ func SetRedis(addr string, auth ...string) {
 
 //SendFunc Wrap chan
 type SendFunc func() chan<- interface{}
+//ErrorFunc return last error
+//If this return a error means you need call again Send/Recv
+//because all connections are closed.
+type ErrorFunc func() error
 
 type redChan interface {
 	ChannelID() string
@@ -70,11 +74,20 @@ func (rd RedisChannel) ChannelKind() reflect.Type {
 }
 
 //Send create chan for send to recv
-func Send(channel redChan, errCh chan<- error, params ...string) (SendFunc, error) {
+func Send(channel redChan, params ...string) (SendFunc, ErrorFunc) {
+	errCh := make(chan error, 1)
+	fail := func() error {
+		select {
+		case err := <-errCh:
+			return err
+		default:
+			return nil
+		}
+	}
 	pool := newPool(getRedisParams(params...))
 	_, connErr := pool.Dial()
 	if connErr != nil {
-		return nil, connErr
+		return nil, fail
 	}
 	conn := pool.Get()
 
@@ -123,21 +136,32 @@ func Send(channel redChan, errCh chan<- error, params ...string) (SendFunc, erro
 		queue <- redchan
 		return redchan
 	}
-	return send, nil
+
+	return send, fail
 }
 
 //Recv create chan for recv from send
-func Recv(channel redChan, errCh chan<- error, params ...string) (<-chan interface{}, error) {
+func Recv(channel redChan, params ...string) (<-chan interface{}, ErrorFunc) {
+	errch := make(chan error, 1)
+	fail := func() error {
+		select {
+		case err := <-errch:
+			return err
+		default:
+			return nil
+		}
+	}
+
 	pool := newPool(getRedisParams(params...))
 	_, connErr := pool.Dial()
 	if connErr != nil {
-		return nil, connErr
+		return nil, fail
 	}
 
 	//recive chan data <-
 	redchan := make(chan interface{}, channel.ChannelSize())
-	go doRecvRedChan(pool, channel, redchan, errCh, channel.ChannelSize(), channel.ChannelID())
-	return redchan, nil
+	go doRecvRedChan(pool, channel, redchan, errch, channel.ChannelSize(), channel.ChannelID())
+	return redchan, fail
 }
 
 //Close Channel

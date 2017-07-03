@@ -21,12 +21,12 @@ go get github.com/bit4bit/redchan
 redisChannel := RedisChannel{[]byte{}, "channeluuid", 0}
 defer redchan.Close(redisChannel)
 sendCh, sendErr := redchan.Send(redisChannel)
-if sendErr != nil {
+if err := sendErr(); err != nil {
 	t.Fatal(sendErr)
 }
 
 recvCh, recvErr := redchan.Recv(redisChannel)
-if recvErr != nil {
+if err := recvErr(); err != nil {
 		t.Fatal(recvErr)
 }
 
@@ -54,12 +54,12 @@ for recv := <-recvCh {
 redisChannel := RedisChannel{[]byte{}, "channeluuid", 2}
 defer redchan.Close(redisChannel)
 sendCh, sendErr := redchan.Send(redisChannel)
-if sendErr != nil {
+if err := sendErr(); err != nil {
 	t.Fatal(sendErr)
 }
 
 recvCh, recvErr := redchan.Recv(redisChannel)
-if recvErr != nil {
+if err := recvErr(); err != nil {
 		t.Fatal(recvErr)
 }
 
@@ -89,12 +89,12 @@ type msg struct {
 redisChannel := RedisChannel{msg{}, "channeluuid", 0}
 defer redchan.Close(redisChannel)
 sendCh, sendErr := redchan.Send(redisChannel)
-if sendErr != nil {
+if err := sendErr(); err != nil {
 	t.Fatal(sendErr)
 }
 
 recvCh, recvErr := redchan.Recv(redisChannel)
-if recvErr != nil {
+if err := recvErr(); err != nil {
 		t.Fatal(recvErr)
 }
 

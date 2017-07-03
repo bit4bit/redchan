@@ -28,14 +28,13 @@ func TestBuffered(t *testing.T) {
 	time.Sleep(time.Second * 2)
 
 	redisChannel := RedisChannel{msg{}, "testbuf", 2}
-	errch := make(chan error, 2)
-	sendCh, sendErr := Send(redisChannel, errch)
-	if sendErr != nil {
+	sendCh, sendErr := Send(redisChannel)
+	if err := sendErr(); err != nil {
 		t.Fatal(sendErr)
 	}
 
-	recvCh, recvErr := Recv(redisChannel, errch)
-	if recvErr != nil {
+	recvCh, recvErr := Recv(redisChannel)
+	if err := recvErr(); err != nil {
 		t.Fatal(recvErr)
 	}
 	defer Close(redisChannel)
@@ -75,13 +74,13 @@ func TestSingleSend(t *testing.T) {
 	time.Sleep(time.Second * 2)
 
 	redisChannel := RedisChannel{[]byte{}, "test", 0}
-	errch := make(chan error, 2)
-	sendCh, sendErr := Send(redisChannel, errch)
-	if sendErr != nil {
-		t.Fatal(sendErr)
+
+	sendCh, sendErr := Send(redisChannel)
+	if err := sendErr(); err != nil {
+		t.Fatal(err)
 	}
-	recvCh, recvErr := Recv(redisChannel, errch)
-	if recvErr != nil {
+	recvCh, recvErr := Recv(redisChannel)
+	if err := recvErr(); err != nil {
 		t.Fatal(recvErr)
 	}
 	defer Close(redisChannel)
@@ -114,13 +113,13 @@ func TestBlockingSendChan(t *testing.T) {
 	time.Sleep(time.Second * 2)
 
 	redisChannel := RedisChannel{[]byte{}, "testb", 0}
-	errch := make(chan error, 2)
-	sendCh, sendErr := Send(redisChannel, errch)
-	if sendErr != nil {
+
+	sendCh, sendErr := Send(redisChannel)
+	if err := sendErr(); err != nil {
 		t.Fatal(sendErr)
 	}
-	recvCh, recvErr := Recv(redisChannel, errch)
-	if recvErr != nil {
+	recvCh, recvErr := Recv(redisChannel)
+	if err := recvErr(); err != nil {
 		t.Fatal(recvErr)
 	}
 	defer Close(redisChannel)
@@ -173,14 +172,14 @@ func TestBlockingRecvChan(t *testing.T) {
 	time.Sleep(time.Second * 2)
 
 	redisChannel := RedisChannel{[]byte{}, "testc", 0}
-	errch := make(chan error, 2)
-	sendCh, sendErr := Send(redisChannel, errch)
-	if sendErr != nil {
-		t.Fatal(sendErr)
+
+	sendCh, sendErr := Send(redisChannel)
+	if err := sendErr(); err != nil {
+		t.Fatal(err)
 	}
-	recvCh, recvErr := Recv(redisChannel, errch)
-	if recvErr != nil {
-		t.Fatal(recvErr)
+	recvCh, recvErr := Recv(redisChannel)
+	if err := recvErr(); err != nil {
+		t.Fatal(err)
 	}
 	defer Close(redisChannel)
 
@@ -215,14 +214,14 @@ func TestSequenceSend(t *testing.T) {
 	time.Sleep(time.Second * 2)
 
 	redisChannel := RedisChannel{[]byte{}, "testa", 0}
-	errch := make(chan error, 2)
-	sendCh, sendErr := Send(redisChannel, errch)
-	if sendErr != nil {
-		t.Fatal(sendErr)
+
+	sendCh, sendErr := Send(redisChannel)
+	if err := sendErr(); err != nil {
+		t.Fatal(err)
 	}
-	recvCh, recvErr := Recv(redisChannel, errch)
-	if recvErr != nil {
-		t.Fatal(recvErr)
+	recvCh, recvErr := Recv(redisChannel)
+	if err := recvErr(); err != nil {
+		t.Fatal(err)
 	}
 	defer Close(redisChannel)
 	expectCh := make(chan string)
@@ -269,14 +268,13 @@ func TestCloseSend(t *testing.T) {
 	time.Sleep(time.Second * 2)
 
 	redisChannel := RedisChannel{[]byte{}, "tescloset", 0}
-	errch := make(chan error, 2)
-	sendCh, sendErr := Send(redisChannel, errch)
-	if sendErr != nil {
-		t.Fatal(sendErr)
+	sendCh, sendErr := Send(redisChannel)
+	if err := sendErr(); err != nil {
+		t.Fatal(err)
 	}
-	recvCh, recvErr := Recv(redisChannel, errch)
-	if recvErr != nil {
-		t.Fatal(recvErr)
+	recvCh, recvErr := Recv(redisChannel)
+	if err := recvErr(); err != nil {
+		t.Fatal(err)
 	}
 	defer Close(redisChannel)
 
