@@ -1,26 +1,26 @@
 package redchan
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"os/exec"
+	"sync"
 	"testing"
 	"time"
-	"sync"
-	"bytes"
 )
 
-const TEST_PORT_REDIS = 5445
+const testPortRedis = 5445
 
 type msg struct {
 	Data []byte
 }
 
 func TestBuffered(t *testing.T) {
-	redisAddress := fmt.Sprintf(":%d", TEST_PORT_REDIS)
+	redisAddress := fmt.Sprintf(":%d", testPortRedis)
 	SetRedis(redisAddress)
 
-	redis, redisErr := runRedisServer(TEST_PORT_REDIS)
+	redis, redisErr := runRedisServer(testPortRedis)
 	if redisErr != nil {
 		t.Fatal(redisErr)
 	}
@@ -46,28 +46,28 @@ func TestBuffered(t *testing.T) {
 	go func() {
 		for i := 0; i < testn; i++ {
 			wg.Add(1)
-			sendCh() <- msg{[]byte(fmt.Sprintf("test%d",i))}
+			sendCh() <- msg{[]byte(fmt.Sprintf("test%d", i))}
 			wg.Done()
 		}
 		close(done)
 	}()
 	wg.Wait()
 
-	for i := 0 ; i < testn; i++ {
+	for i := 0; i < testn; i++ {
 		msg := (<-recvCh).(msg)
-		expected :=  fmt.Sprintf("test%d",i)
+		expected := fmt.Sprintf("test%d", i)
 		was := string(msg.Data)
-		if  was != expected {
+		if was != expected {
 			t.Fatalf("was %s expected %s", was, expected)
 		}
 	}
 }
 
 func TestSingleSend(t *testing.T) {
-	redisAddress := fmt.Sprintf(":%d", TEST_PORT_REDIS)
+	redisAddress := fmt.Sprintf(":%d", testPortRedis)
 	SetRedis(redisAddress)
 
-	redis, redisErr := runRedisServer(TEST_PORT_REDIS)
+	redis, redisErr := runRedisServer(testPortRedis)
 	if redisErr != nil {
 		t.Fatal(redisErr)
 	}
@@ -103,17 +103,17 @@ func TestSingleSend(t *testing.T) {
 }
 
 func TestBlockingSendChan(t *testing.T) {
-	redisAddress := fmt.Sprintf(":%d", TEST_PORT_REDIS)
+	redisAddress := fmt.Sprintf(":%d", testPortRedis)
 	SetRedis(redisAddress)
 
-	redis, redisErr := runRedisServer(TEST_PORT_REDIS)
+	redis, redisErr := runRedisServer(testPortRedis)
 	if redisErr != nil {
 		t.Fatal(redisErr)
 	}
 	defer redis.Kill()
 	time.Sleep(time.Second * 2)
 
-	redisChannel := RedisChannel{[]byte{},"testb", 0}
+	redisChannel := RedisChannel{[]byte{}, "testb", 0}
 	errch := make(chan error, 2)
 	sendCh, sendErr := Send(redisChannel, errch)
 	if sendErr != nil {
@@ -162,10 +162,10 @@ func TestBlockingSendChan(t *testing.T) {
 }
 
 func TestBlockingRecvChan(t *testing.T) {
-	redisAddress := fmt.Sprintf(":%d", TEST_PORT_REDIS)
+	redisAddress := fmt.Sprintf(":%d", testPortRedis)
 	SetRedis(redisAddress)
 
-	redis, redisErr := runRedisServer(TEST_PORT_REDIS)
+	redis, redisErr := runRedisServer(testPortRedis)
 	if redisErr != nil {
 		t.Fatal(redisErr)
 	}
@@ -204,10 +204,10 @@ func TestBlockingRecvChan(t *testing.T) {
 }
 
 func TestSequenceSend(t *testing.T) {
-	redisAddress := fmt.Sprintf(":%d", TEST_PORT_REDIS)
+	redisAddress := fmt.Sprintf(":%d", testPortRedis)
 	SetRedis(redisAddress)
 
-	redis, redisErr := runRedisServer(TEST_PORT_REDIS)
+	redis, redisErr := runRedisServer(testPortRedis)
 	if redisErr != nil {
 		t.Fatal(redisErr)
 	}
@@ -258,10 +258,10 @@ loop:
 }
 
 func TestCloseSend(t *testing.T) {
-	redisAddress := fmt.Sprintf(":%d", TEST_PORT_REDIS)
+	redisAddress := fmt.Sprintf(":%d", testPortRedis)
 	SetRedis(redisAddress)
 
-	redis, redisErr := runRedisServer(TEST_PORT_REDIS)
+	redis, redisErr := runRedisServer(testPortRedis)
 	if redisErr != nil {
 		t.Fatal(redisErr)
 	}

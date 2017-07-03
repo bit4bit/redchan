@@ -1,39 +1,37 @@
-//Package redchan
-//go lang chan over redis
+//Package redchan go lang chan over redis
 package redchan
 
 import (
 	"context"
 	"fmt"
 	"github.com/garyburd/redigo/redis"
-	"time"
 	"reflect"
+	"time"
 )
 
 const (
-	//Where client send and recv data
-	FORMAT_CHANNEL_KEY       = "redchan:channel:%s"
-	FORMAT_CHANNEL_KEY_CLOSE = "redchan:channel:close:%s"
-	FORMAT_CHANNEL_RECV_KEY  = "redchan:channel:recv:%s"
+	formatChannelRedisKey       = "redchan:channel:%s"
+	formatChannelRedisKeyClose = "redchan:channel:close:%s"
+	formatChannelRedisRecvKey  = "redchan:channel:recv:%s"
 )
 
 var (
-	DEFAULT_REDIS_ADDRESS = ":6379"
-	DEFAULT_REDIS_AUTH    = ""
+	defaultRedisAddress = ":6379"
+	defaultRedisAuth    = ""
 )
 
 //SetRedis assign default redis addres and auth
 func SetRedis(addr string, auth ...string) {
-	DEFAULT_REDIS_ADDRESS = addr
+	defaultRedisAddress = addr
 	if len(auth) > 0 {
-		DEFAULT_REDIS_AUTH = auth[0]
+		defaultRedisAuth = auth[0]
 	} else {
-		DEFAULT_REDIS_AUTH = ""
+		defaultRedisAuth = ""
 	}
 
 }
 
-//Wrap chan
+//SendFunc Wrap chan
 type SendFunc func() chan<- interface{}
 
 type redChan interface {
@@ -50,17 +48,17 @@ type RedisChannel struct {
 	size int
 }
 
-//unique id for channel
+//ChannelID unique id for channel
 func (rd RedisChannel) ChannelID() string {
 	return rd.id
 }
 
-//size of channel
+//ChannelSize size of channel
 func (rd RedisChannel) ChannelSize() int {
 	return rd.size
 }
 
-//kind of channel for decoding and encoding any struct
+//ChannelKind kind of channel for decoding and encoding any struct
 func (rd RedisChannel) ChannelKind() reflect.Type {
 	typ := reflect.TypeOf(rd.kind)
 	switch typ.Kind() {
@@ -80,9 +78,9 @@ func Send(channel redChan, errCh chan<- error, params ...string) (SendFunc, erro
 	}
 	conn := pool.Get()
 
-	sendKey := fmt.Sprintf(FORMAT_CHANNEL_KEY, channel.ChannelID())
-	sendCloseKey := fmt.Sprintf(FORMAT_CHANNEL_KEY_CLOSE, channel.ChannelID())
-	recvKey := fmt.Sprintf(FORMAT_CHANNEL_RECV_KEY, channel.ChannelID())
+	sendKey := fmt.Sprintf(formatChannelRedisKey, channel.ChannelID())
+	sendCloseKey := fmt.Sprintf(formatChannelRedisKeyClose, channel.ChannelID())
+	recvKey := fmt.Sprintf(formatChannelRedisRecvKey, channel.ChannelID())
 
 	queue := make(chan chan interface{}, channel.ChannelSize()+1)
 
@@ -94,12 +92,12 @@ func Send(channel redChan, errCh chan<- error, params ...string) (SendFunc, erro
 				break
 			}
 			raw, errEncode := encode(data)
-			
+
 			if errEncode != nil {
 				errCh <- errEncode
 				break
 			}
-			
+
 			_, replyErr := conn.Do("LPUSH", sendKey, raw)
 			if replyErr != nil {
 				errCh <- replyErr
@@ -129,7 +127,7 @@ func Send(channel redChan, errCh chan<- error, params ...string) (SendFunc, erro
 }
 
 //Recv create chan for recv from send
-func Recv(channel redChan, errCh chan<- error, params ...string) (<-chan interface{},  error) {
+func Recv(channel redChan, errCh chan<- error, params ...string) (<-chan interface{}, error) {
 	pool := newPool(getRedisParams(params...))
 	_, connErr := pool.Dial()
 	if connErr != nil {
@@ -147,9 +145,9 @@ func Close(channel redChan, params ...string) {
 	pool := newPool(getRedisParams(params...))
 	conn := pool.Get()
 	defer conn.Close()
-	sendKey := fmt.Sprintf(FORMAT_CHANNEL_KEY, channel.ChannelID())
-	sendCloseKey := fmt.Sprintf(FORMAT_CHANNEL_KEY_CLOSE, channel.ChannelID())
-	recvKey := fmt.Sprintf(FORMAT_CHANNEL_RECV_KEY, channel.ChannelID())
+	sendKey := fmt.Sprintf(formatChannelRedisKey, channel.ChannelID())
+	sendCloseKey := fmt.Sprintf(formatChannelRedisKeyClose, channel.ChannelID())
+	recvKey := fmt.Sprintf(formatChannelRedisRecvKey, channel.ChannelID())
 
 	_, replyErr := conn.Do("LPUSH", sendCloseKey, true)
 	if replyErr != nil {
@@ -171,9 +169,9 @@ func doRecvRedChan(
 
 	defer pool.Close()
 
-	recvKey := fmt.Sprintf(FORMAT_CHANNEL_KEY, channelID)
-	sendKey := fmt.Sprintf(FORMAT_CHANNEL_RECV_KEY, channelID)
-	sendCloseKey := fmt.Sprintf(FORMAT_CHANNEL_KEY_CLOSE, channelID)
+	recvKey := fmt.Sprintf(formatChannelRedisKey, channelID)
+	sendKey := fmt.Sprintf(formatChannelRedisRecvKey, channelID)
+	sendCloseKey := fmt.Sprintf(formatChannelRedisKeyClose, channelID)
 
 	recvData := make(chan interface{}, size+1)
 
@@ -224,11 +222,9 @@ func doRecvRedChan(
 					}
 				}
 
-
 				val := reflect.New(channel.ChannelKind()).Interface()
 
 				if err := decode(data, val); err != nil {
-					panic(err)
 					errch <- err
 				} else {
 					switch channel.ChannelKind().Kind() {
@@ -236,7 +232,7 @@ func doRecvRedChan(
 						recvData <- val
 					default:
 						typ := reflect.TypeOf(val)
-					
+
 						switch typ.Kind() {
 						case reflect.Ptr:
 							vl := reflect.ValueOf(val)

@@ -55,8 +55,8 @@ func getRedisParams(params ...string) (string, string) {
 	case 1:
 		redisAddress = params[0]
 	case 0:
-		redisAddress = DEFAULT_REDIS_ADDRESS
-		redisAuth = DEFAULT_REDIS_AUTH
+		redisAddress = defaultRedisAddress
+		redisAuth = defaultRedisAuth
 	}
 	return redisAddress, redisAuth
 }
