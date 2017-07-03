@@ -33,6 +33,7 @@ func SetRedis(addr string, auth ...string) {
 
 //SendFunc Wrap chan
 type SendFunc func() chan<- interface{}
+
 //ErrorFunc return last error
 //If this return a error means you need call again Send/Recv
 //because all connections are closed.
